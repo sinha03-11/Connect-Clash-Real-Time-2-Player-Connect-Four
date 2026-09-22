@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Connect Four: Online Battle</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brandDark: '#0B0F19',
+            brandCard: '#111827',
+            brandBorder: '#1F2937',
+            discRed: '#EF4444',
+            discYellow: '#F59E0B',
+          },
+          animation: {
+            'bounce-short': 'bounceShort 0.5s ease-in-out 1',
+            'pulse-glow': 'pulseGlow 1.8s infinite',
+            'pop-emoji': 'popEmoji 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          },
+          keyframes: {
+            bounceShort: {
+              '0%, 100%': { transform: 'translateY(0)' },
+              '50%': { transform: 'translateY(-15%)' },
+            },
+            pulseGlow: {
+              '0%, 100%': { opacity: '1', transform: 'scale(1)' },
+              '50%': { opacity: '0.8', transform: 'scale(1.05)' },
+            },
+            popEmoji: {
+              '0%': { opacity: '0', transform: 'translateY(20px) scale(0.6)' },
+              '30%': { opacity: '1', transform: 'translateY(-20px) scale(1.3)' },
+              '80%': { opacity: '1', transform: 'translateY(-50px) scale(1)' },
+              '100%': { opacity: '0', transform: 'translateY(-80px) scale(0.8)' },
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Outfit', sans-serif;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    
+    .board-grid {
+      background: radial-gradient(circle at 50% 30%, #1e293b, #0f172a);
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7), inset 0 2px 4px rgba(255, 255, 255, 0.1);
+    }
+
+    .slot {
+      aspect-ratio: 1 / 1;
+      position: relative;
+    }
+
+    .disc {
+      position: absolute;
+      inset: 4px;
+      border-radius: 9999px;
+      transition: transform 0.42s cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
+
+    .disc-red {
+      background: radial-gradient(circle at 35% 35%, #f87171, #dc2626 60%, #991b1b);
+      box-shadow: 0 4px 10px rgba(239, 68, 68, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.4);
+    }
+
+    .disc-yellow {
+      background: radial-gradient(circle at 35% 35%, #fde047, #f59e0b 60%, #b45309);
+      box-shadow: 0 4px 10px rgba(245, 158, 11, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.4);
+    }
+
+    .disc-winning {
+      animation: pulseGlow 1s infinite alternate;
+      border: 3px solid #ffffff;
+      filter: drop-shadow(0 0 12px #ffffff);
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+
+<body class="bg-[#0B0F19] text-gray-100 min-h-screen flex flex-col justify-between overflow-x-hidden">
+
+  <header class="border-b border-gray-800/80 bg-gray-950/70 backdrop-blur-md sticky top-0 z-30 px-4 py-3 sm:px-6">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-red-500 to-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/20">
+          <i class="fa-solid fa-shapes text-xl text-gray-950"></i>
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-extrabold tracking-tight bg-gradient-to-r from-red-400 via-amber-300 to-amber-500 bg-clip-text text-transparent">
+            Connect Four
+          </h1>
+          <p class="text-xs text-gray-400 font-medium hidden sm:block">Multiplayer Battle Arena</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Audio Mute Button -->
+        <button id="soundToggleBtn" class="p-2.5 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-gray-300 hover:text-white transition shadow-sm" title="Toggle Sound">
+          <i id="soundIcon" class="fa-solid fa-volume-high"></i>
+        </button>
+
+        <!-- Mode Indicator / Reset -->
+        <button id="openLobbyBtn" class="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition flex items-center gap-2">
+          <i class="fa-solid fa-gear"></i>
+          <span class="hidden sm:inline">Settings</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-4xl w-full mx-auto px-3 sm:px-4 py-3 sm:py-4 flex-1 flex flex-col items-center justify-center">
+
+    <!-- Quick Mode Selector Bar -->
+    <div class="w-full max-w-lg mb-3 flex items-center justify-center p-1 bg-gray-900/90 border border-gray-800 rounded-2xl shadow-inner gap-1 text-xs font-semibold">
+      <button id="modeLocalBtn" class="flex-1 py-1.5 px-2 rounded-xl bg-gradient-to-r from-red-500 to-amber-500 text-gray-950 font-bold shadow-md transition flex items-center justify-center gap-1.5">
+        <i class="fa-solid fa-user-group"></i>
+        <span>2-Player Shared</span>
+      </button>
+      <button id="modeAIBtn" class="flex-1 py-1.5 px-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800/70 transition flex items-center justify-center gap-1.5">
+        <i class="fa-solid fa-robot"></i>
+        <span>vs AI Bot</span>
+      </button>
+      <button id="modeOnlineBtn" class="flex-1 py-1.5 px-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800/70 transition flex items-center justify-center gap-1.5">
+        <i class="fa-solid fa-tower-broadcast"></i>
+        <span>Room Sync</span>
+      </button>
+    </div>
+
+    <!-- Active Turn Instruction Banner -->
+    <div id="turnPromptBanner" class="w-full max-w-lg mb-3 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between border transition-all duration-300 bg-red-950/40 border-red-500/40 text-red-300">
+      <div class="flex items-center gap-2">
+        <span id="turnIndicatorDot" class="w-3 h-3 rounded-full bg-red-500 shadow-lg shadow-red-500/80 animate-pulse"></span>
+        <span id="turnPromptText">Red's Turn — Tap any column to drop</span>
+      </div>
+      <span id="screenModeTag" class="text-[10px] uppercase tracking-wider bg-black/40 px-2 py-0.5 rounded-md border border-gray-700 text-gray-300">Same Screen</span>
+    </div>
+
+    <!-- Match Stats & Turn Indicator -->
+    <div class="w-full max-w-lg grid grid-cols-3 gap-2 sm:gap-3 mb-4 text-center">
+      <!-- Player 1 Info -->
+      <div id="p1Card" class="bg-gray-900/90 border border-red-500/40 rounded-2xl p-2.5 sm:p-3 relative overflow-hidden transition-all shadow-md">
+        <div class="flex items-center justify-center gap-1.5 mb-1">
+          <span class="w-3 h-3 rounded-full bg-red-500 shadow-sm shadow-red-500/80"></span>
+          <span id="p1Name" class="text-xs sm:text-sm font-bold text-red-300 truncate">Player 1 (Red)</span>
+        </div>
+        <div id="p1Score" class="text-xl sm:text-2xl font-black text-white">0</div>
+        <div id="p1TurnTag" class="text-[10px] font-semibold uppercase tracking-wider text-red-400 mt-0.5">Your Turn</div>
+        <div id="p1TurnGlow" class="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 to-transparent"></div>
+      </div>
+
+      <!-- Round Info & Center Actions -->
+      <div class="bg-gray-900/60 border border-gray-800 rounded-2xl p-2.5 sm:p-3 flex flex-col items-center justify-center">
+        <span class="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Ties</span>
+        <span id="drawScore" class="text-lg sm:text-xl font-extrabold text-gray-200">0</span>
+        <button id="restartBtn" class="mt-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition flex items-center gap-1 border border-gray-700">
+          <i class="fa-solid fa-rotate-right text-[10px]"></i> Rematch
+        </button>
+      </div>
+
+      <!-- Player 2 Info -->
+      <div id="p2Card" class="bg-gray-900/90 border border-amber-500/20 rounded-2xl p-2.5 sm:p-3 relative overflow-hidden transition-all shadow-md opacity-70">
+        <div class="flex items-center justify-center gap-1.5 mb-1">
+          <span class="w-3 h-3 rounded-full bg-amber-400 shadow-sm shadow-amber-400/80"></span>
+          <span id="p2Name" class="text-xs sm:text-sm font-bold text-amber-300 truncate">Player 2 (Yellow)</span>
+        </div>
+        <div id="p2Score" class="text-xl sm:text-2xl font-black text-white">0</div>
+        <div id="p2TurnTag" class="text-[10px] font-semibold uppercase tracking-wider text-amber-400 mt-0.5 opacity-0">Waiting</div>
+        <div id="p2TurnGlow" class="hidden absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-transparent"></div>
+      </div>
+    </div>
+
+    <div class="relative w-full max-w-lg aspect-[7/6] p-2.5 sm:p-3.5 board-grid rounded-3xl border border-gray-700/60 shadow-2xl flex flex-col justify-between">
+      
+      <!-- Interactive Columns Hover Indicators -->
+      <div id="columnSelectors" class="grid grid-cols-7 gap-1.5 sm:gap-2 absolute -top-8 left-3.5 right-3.5 h-6 z-10 pointer-events-none">
+      </div>
+
+      <!-- 7x6 Matrix Grid Slots -->
+      <div id="boardContainer" class="grid grid-cols-7 grid-rows-6 gap-1.5 sm:gap-2.5 w-full h-full relative cursor-pointer">
+      </div>
+
+      <!-- Floating Emoji Overlay Zone -->
+      <div id="reactionField" class="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl z-20"></div>
+    </div>
+
+    <!-- Quick Chat and Reaction Bar -->
+    <div class="w-full max-w-lg mt-3 flex items-center justify-between gap-2 bg-gray-900/80 border border-gray-800 px-3 py-2 rounded-2xl backdrop-blur-sm">
+      <span class="text-xs text-gray-400 font-medium hidden sm:inline">React:</span>
+      <div class="flex items-center gap-1.5 overflow-x-auto py-1 text-lg">
+        <button class="reaction-btn hover:scale-125 transition-transform px-1" data-emoji="🔥">🔥</button>
+        <button class="reaction-btn hover:scale-125 transition-transform px-1" data-emoji="🎉">🎉</button>
+        <button class="reaction-btn hover:scale-125 transition-transform px-1" data-emoji="👏">👏</button>
+        <button class="reaction-btn hover:scale-125 transition-transform px-1" data-emoji="🤔">🤔</button>
+        <button class="reaction-btn hover:scale-125 transition-transform px-1" data-emoji="😱">😱</button>
+        <button class="reaction-btn hover:scale-125 transition-transform px-1" data-emoji="💀">💀</button>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="chat-preset px-2 py-1 text-xs rounded-md bg-gray-800 hover:bg-gray-700 text-gray-300 transition" data-msg="Good move!">GG!</button>
+        <button class="chat-preset px-2 py-1 text-xs rounded-md bg-gray-800 hover:bg-gray-700 text-gray-300 transition" data-msg="Nice try!">Nice!</button>
+      </div>
+    </div>
+  </main>
+
+  <div id="lobbyModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 hidden">
+    <div class="bg-gray-900 border border-gray-700/80 rounded-3xl max-w-md w-full p-6 shadow-2xl relative text-left">
+      <div class="flex items-center justify-between pb-3 border-b border-gray-800 mb-4">
+        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-network-wired text-amber-400"></i> Multiplayer & Game Modes
+        </h2>
+        <button id="closeModalBtn" class="p-1 rounded-lg text-gray-400 hover:text-white">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="grid grid-cols-3 gap-1 bg-gray-950 p-1 rounded-xl mb-4 text-xs font-semibold">
+        <button id="tabOnline" class="py-2 rounded-lg bg-indigo-600 text-white transition">Room Sync</button>
+        <button id="tabLocal" class="py-2 rounded-lg text-gray-400 hover:text-white transition">Pass & Play</button>
+        <button id="tabAI" class="py-2 rounded-lg text-gray-400 hover:text-white transition">Play AI</button>
+      </div>
+
+      <!-- Tab 1: Room Sync -->
+      <div id="panelOnline" class="space-y-4">
+        <p class="text-xs text-gray-300 leading-relaxed">
+          Open this game in two browser tabs or windows with the same Room ID to play in real-time.
+        </p>
+        <div class="bg-gray-950/80 p-3 rounded-2xl border border-gray-800 text-center">
+          <span class="text-xs uppercase text-gray-400 font-bold tracking-wider">Active Room Code</span>
+          <div class="flex items-center justify-center gap-2 my-2">
+            <input id="customRoomInput" type="text" maxlength="8" value="BATTLE1" class="bg-gray-900 border border-gray-700 text-amber-400 text-center font-mono font-bold text-xl uppercase tracking-widest px-3 py-1.5 rounded-xl w-36 focus:outline-none focus:border-amber-400">
+            <button id="setRoomBtn" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition">Set</button>
+          </div>
+          <div class="flex justify-center gap-2 mt-2">
+            <span class="text-[11px] text-gray-400">Choose your side:</span>
+            <button id="pickRedBtn" class="px-2 py-0.5 rounded bg-red-900/60 text-red-300 text-xs border border-red-500/40 font-bold">Red</button>
+            <button id="pickYellowBtn" class="px-2 py-0.5 rounded bg-amber-900/60 text-amber-300 text-xs border border-amber-500/40 font-bold">Yellow</button>
+          </div>
+        </div>
+
+        <button id="copyInviteLinkBtn" class="w-full py-2.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold rounded-xl text-xs sm:text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition">
+          <i class="fa-solid fa-copy"></i> Copy Direct Room Link
+        </button>
+      </div>
+
+      <!-- Tab 2: Pass & Play -->
+      <div id="panelLocal" class="space-y-3 hidden">
+        <div class="p-4 rounded-2xl border border-gray-700 bg-gray-950/60">
+          <div class="text-sm font-bold text-white flex items-center gap-2 mb-1">
+            <i class="fa-solid fa-user-group text-blue-400"></i> Pass & Play (Same Device)
+          </div>
+          <p class="text-xs text-gray-400 mb-4">Take turns tapping or clicking to drop pieces on this screen.</p>
+          <button id="activatePassPlayBtn" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition">
+            Start Pass & Play Mode
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab 3: AI Bot Mode -->
+      <div id="panelAI" class="space-y-3 hidden">
+        <div class="p-4 rounded-2xl border border-gray-700 bg-gray-950/60">
+          <div class="text-sm font-bold text-white flex items-center gap-2 mb-1">
+            <i class="fa-solid fa-robot text-purple-400"></i> Solo Practice vs AI
+          </div>
+          <p class="text-xs text-gray-400 mb-4">Play as Red against an automated smart bot that plans moves and blocks your win lines.</p>
+          <button id="activateAIBtn" class="w-full py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs transition">
+            Play vs Smart AI
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Box -->
+  <div id="toastNotification" class="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-gray-900 border border-gray-700 text-white text-xs font-semibold shadow-2xl opacity-0 transition-opacity duration-300 pointer-events-none z-50 flex items-center gap-2">
+    <i class="fa-solid fa-circle-info text-amber-400"></i>
+    <span id="toastMsg">Notification</span>
+  </div>
+
+  <script>
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            this.ctx = new AudioContext();
+          }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playDrop() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(120, this.ctx.currentTime + 0.14);
+
+        gain.gain.setValueAtTime(0.35, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.15);
+      }
+
+      playWin() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const notes = [440, 554.37, 659.25, 880];
+        notes.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.value = freq;
+
+          const start = this.ctx.currentTime + idx * 0.1;
+          gain.gain.setValueAtTime(0.25, start);
+          gain.gain.exponentialRampToValueAtTime(0.001, start + 0.35);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+
+          osc.start(start);
+          osc.stop(start + 0.35);
+        });
+      }
+
+      playPop() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.08);
+
+        gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.08);
+      }
+    }
+
+    const audio = new SoundEngine();
+
+    const ROWS = 6;
+    const COLS = 7;
+    const PLAYER_1 = 1; // Red
+    const PLAYER_2 = 2; // Yellow
+
+    let board = [];
+    let currentPlayer = PLAYER_1;
+    let gameActive = true;
+    let winningSlots = [];
+    let gameMode = 'local'; // Default to 2-Player Same Screen
+    let myPlayerRole = PLAYER_1;
+    let currentRoomId = 'BATTLE1';
+    let scores = { p1: 0, p2: 0, draws: 0 };
+
+    // Built-in cross-context communications (safe in Canvas/iFrames without external WebSockets)
+    let channel = null;
+
+    function initChannel() {
+      try {
+        if (channel) {
+          channel.close();
+        }
+        if (typeof BroadcastChannel !== 'undefined') {
+          channel = new BroadcastChannel(`c4_room_${currentRoomId}`);
+          channel.onmessage = (event) => handleIncomingMessage(event.data);
+        }
+      } catch (err) {
+        console.warn('BroadcastChannel not supported, falling back to localStorage events', err);
+      }
+
+      // Storage event fallback for cross-window sync
+      window.addEventListener('storage', (e) => {
+        if (e.key === `c4_sync_${currentRoomId}` && e.newValue) {
+          try {
+            const data = JSON.parse(e.newValue);
+            handleIncomingMessage(data);
+          } catch (err) {}
+        }
+      });
+    }
+
+    function sendNetworkMessage(msg) {
+      if (gameMode !== 'online') return;
+      msg._senderId = window._clientId;
+      msg._ts = Date.now();
+
+      // 1. Send via BroadcastChannel
+      if (channel) {
+        try {
+          channel.postMessage(msg);
+        } catch (e) {}
+      }
+
+      // 2. Also emit to localStorage for multi-window sync
+      try {
+        localStorage.setItem(`c4_sync_${currentRoomId}`, JSON.stringify(msg));
+      } catch (e) {}
+    }
+
+    function handleIncomingMessage(data) {
+      if (!data || data._senderId === window._clientId) return;
+
+      switch (data.type) {
+        case 'MOVE':
+          applyMove(data.col, data.player, false);
+          break;
+
+        case 'RESTART_REQUEST':
+          initBoard();
+          showToast("Opponent restarted the match!");
+          break;
+
+        case 'REACTION':
+          spawnFloatingEmoji(data.emoji);
+          audio.playPop();
+          break;
+
+        case 'CHAT':
+          showToast(`Opponent: ${data.msg}`);
+          audio.playPop();
+          break;
+      }
+    }
+
+    const boardContainer = document.getElementById('boardContainer');
+    const columnSelectors = document.getElementById('columnSelectors');
+
+    function initBoard() {
+      board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+      winningSlots = [];
+      gameActive = true;
+      currentPlayer = PLAYER_1;
+      renderBoardGrid();
+      updateTurnUI();
+    }
+
+    function renderBoardGrid() {
+      boardContainer.innerHTML = '';
+      columnSelectors.innerHTML = '';
+
+      // Column selector indicators at top
+      for (let c = 0; c < COLS; c++) {
+        const colIndicator = document.createElement('div');
+        colIndicator.className = 'w-full h-2 rounded-full transition-colors duration-200 bg-transparent';
+        colIndicator.id = `col-guide-${c}`;
+        columnSelectors.appendChild(colIndicator);
+      }
+
+      // Slots
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const slot = document.createElement('div');
+          slot.className = 'slot bg-gray-950/90 rounded-full flex items-center justify-center shadow-inner relative overflow-hidden border border-gray-800/80';
+          slot.dataset.row = r;
+          slot.dataset.col = c;
+
+          const disc = document.createElement('div');
+          disc.className = 'disc opacity-0';
+          disc.id = `disc-${r}-${c}`;
+          slot.appendChild(disc);
+
+          boardContainer.appendChild(slot);
+        }
+      }
+    }
+
+    function updateBoardUI() {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const val = board[r][c];
+          const disc = document.getElementById(`disc-${r}-${c}`);
+          if (!disc) continue;
+
+          disc.className = 'disc';
+          if (val === PLAYER_1) {
+            disc.classList.add('disc-red', 'opacity-100');
+          } else if (val === PLAYER_2) {
+            disc.classList.add('disc-yellow', 'opacity-100');
+          } else {
+            disc.classList.add('opacity-0');
+          }
+
+          const isWinning = winningSlots.some(([wr, wc]) => wr === r && wc === c);
+          if (isWinning) {
+            disc.classList.add('disc-winning');
+          }
+        }
+      }
+    }
+
+    function getLowestEmptyRow(col) {
+      for (let r = ROWS - 1; r >= 0; r--) {
+        if (board[r][col] === 0) return r;
+      }
+      return -1;
+    }
+
+    function handleColumnSelection(col) {
+      if (!gameActive) return;
+
+      if (gameMode === 'online') {
+        if (currentPlayer !== myPlayerRole) {
+          const waitName = myPlayerRole === PLAYER_1 ? "Yellow" : "Red";
+          showToast(`Waiting for ${waitName}'s turn!`);
+          return;
+        }
+      }
+
+      applyMove(col, currentPlayer, true);
+    }
+
+    function applyMove(col, player, isSource = false) {
+      const row = getLowestEmptyRow(col);
+      if (row === -1) {
+        showToast("Column is full!");
+        return false;
+      }
+
+      board[row][col] = player;
+      audio.playDrop();
+      updateBoardUI();
+
+      if (isSource && gameMode === 'online') {
+        sendNetworkMessage({ type: 'MOVE', col: col, player: player });
+      }
+
+      const winningStreak = checkWin(row, col, player);
+      if (winningStreak) {
+        gameActive = false;
+        winningSlots = winningStreak;
+        updateBoardUI();
+        audio.playWin();
+
+        if (player === PLAYER_1) scores.p1++;
+        else scores.p2++;
+        updateScoresUI();
+
+        const winnerLabel = player === PLAYER_1 ? "Player 1 (Red)" : "Player 2 (Yellow)";
+        showToast(`🎉 ${winnerLabel} wins this round!`);
+        updateTurnUI(player);
+        return true;
+      }
+
+      if (checkDraw()) {
+        gameActive = false;
+        scores.draws++;
+        updateScoresUI();
+        showToast("Board full! It's a draw!");
+        updateTurnUI('draw');
+        return true;
+      }
+
+      // Switch turn
+      currentPlayer = currentPlayer === PLAYER_1 ? PLAYER_2 : PLAYER_1;
+      updateTurnUI();
+
+      if (gameMode === 'ai' && currentPlayer === PLAYER_2 && gameActive) {
+        setTimeout(makeAIMove, 450);
+      }
+
+      return true;
+    }
+
+    function checkWin(r, c, p) {
+      const directions = [
+        [[0, 1], [0, -1]],   // Horizontal
+        [[1, 0], [-1, 0]],   // Vertical
+        [[1, 1], [-1, -1]],  // Diagonal \
+        [[1, -1], [-1, 1]]   // Diagonal /
+      ];
+
+      for (let dir of directions) {
+        let cells = [[r, c]];
+
+        for (let [dr, dc] of dir) {
+          let currR = r + dr;
+          let currC = c + dc;
+          while (
+            currR >= 0 && currR < ROWS &&
+            currC >= 0 && currC < COLS &&
+            board[currR][currC] === p
+          ) {
+            cells.push([currR, currC]);
+            currR += dr;
+            currC += dc;
+          }
+        }
+
+        if (cells.length >= 4) {
+          return cells;
+        }
+      }
+      return null;
+    }
+
+    function checkDraw() {
+      return board[0].every(cell => cell !== 0);
+    }
+
+    function makeAIMove() {
+      if (!gameActive || currentPlayer !== PLAYER_2) return;
+
+      // 1. Can AI win immediately?
+      for (let c = 0; c < COLS; c++) {
+        let r = getLowestEmptyRow(c);
+        if (r !== -1) {
+          board[r][c] = PLAYER_2;
+          if (checkWin(r, c, PLAYER_2)) {
+            board[r][c] = 0;
+            applyMove(c, PLAYER_2);
+            return;
+          }
+          board[r][c] = 0;
+        }
+      }
+
+      // 2. Can player win next move? Block them.
+      for (let c = 0; c < COLS; c++) {
+        let r = getLowestEmptyRow(c);
+        if (r !== -1) {
+          board[r][c] = PLAYER_1;
+          if (checkWin(r, c, PLAYER_1)) {
+            board[r][c] = 0;
+            applyMove(c, PLAYER_2);
+            return;
+          }
+          board[r][c] = 0;
+        }
+      }
+
+      // 3. Center column preference
+      const colPreference = [3, 2, 4, 1, 5, 0, 6];
+      for (let c of colPreference) {
+        if (getLowestEmptyRow(c) !== -1) {
+          applyMove(c, PLAYER_2);
+          return;
+        }
+      }
+    }
+
+    function updateTurnUI(winner = null) {
+      const p1Card = document.getElementById('p1Card');
+      const p2Card = document.getElementById('p2Card');
+      const p1TurnTag = document.getElementById('p1TurnTag');
+      const p2TurnTag = document.getElementById('p2TurnTag');
+      const p1TurnGlow = document.getElementById('p1TurnGlow');
+      const p2TurnGlow = document.getElementById('p2TurnGlow');
+      const turnPromptBanner = document.getElementById('turnPromptBanner');
+      const turnPromptText = document.getElementById('turnPromptText');
+      const turnIndicatorDot = document.getElementById('turnIndicatorDot');
+
+      if (winner) {
+        p1TurnTag.textContent = winner === PLAYER_1 ? "Winner 🏆" : (winner === 'draw' ? "Draw" : "Round Over");
+        p2TurnTag.textContent = winner === PLAYER_2 ? "Winner 🏆" : (winner === 'draw' ? "Draw" : "Round Over");
+        
+        if (winner === 'draw') {
+          turnPromptText.textContent = "Round ended in a Draw! Tap Rematch to play again";
+          turnPromptBanner.className = 'w-full max-w-lg mb-3 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between border transition-all duration-300 bg-gray-800/80 border-gray-600 text-gray-200';
+          turnIndicatorDot.className = 'w-3 h-3 rounded-full bg-gray-400';
+        } else {
+          const winName = winner === PLAYER_1 ? "Player 1 (Red)" : "Player 2 (Yellow)";
+          turnPromptText.textContent = `🎉 ${winName} Wins the Round!`;
+          turnPromptBanner.className = winner === PLAYER_1
+            ? 'w-full max-w-lg mb-3 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between border transition-all duration-300 bg-red-950/60 border-red-500/60 text-red-200'
+            : 'w-full max-w-lg mb-3 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between border transition-all duration-300 bg-amber-950/60 border-amber-500/60 text-amber-200';
+          turnIndicatorDot.className = `w-3 h-3 rounded-full ${winner === PLAYER_1 ? 'bg-red-500' : 'bg-amber-400'} animate-bounce`;
+        }
+        return;
+      }
+
+      if (currentPlayer === PLAYER_1) {
+        p1Card.classList.remove('opacity-60');
+        p2Card.classList.add('opacity-60');
+        p1TurnTag.classList.remove('opacity-0');
+        p2TurnTag.classList.add('opacity-0');
+        p1TurnGlow.classList.remove('hidden');
+        p2TurnGlow.classList.add('hidden');
+        p1TurnTag.textContent = "Your Turn";
+
+        turnPromptBanner.className = 'w-full max-w-lg mb-3 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between border transition-all duration-300 bg-red-950/40 border-red-500/40 text-red-300';
+        turnIndicatorDot.className = 'w-3 h-3 rounded-full bg-red-500 shadow-lg shadow-red-500/80 animate-pulse';
+        turnPromptText.textContent = gameMode === 'local' ? "Player 1 (Red)'s Turn — Tap any column" : "Red's Turn";
+      } else {
+        p2Card.classList.remove('opacity-60');
+        p1Card.classList.add('opacity-60');
+        p2TurnTag.classList.remove('opacity-0');
+        p1TurnTag.classList.add('opacity-0');
+        p2TurnGlow.classList.remove('hidden');
+        p1TurnGlow.classList.add('hidden');
+        p2TurnTag.textContent = gameMode === 'ai' ? "Thinking..." : "Your Turn";
+
+        turnPromptBanner.className = 'w-full max-w-lg mb-3 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between border transition-all duration-300 bg-amber-950/40 border-amber-500/40 text-amber-300';
+        turnIndicatorDot.className = 'w-3 h-3 rounded-full bg-amber-400 shadow-lg shadow-amber-400/80 animate-pulse';
+        turnPromptText.textContent = gameMode === 'ai' ? "AI Bot is calculating..." : (gameMode === 'local' ? "Player 2 (Yellow)'s Turn — Tap any column" : "Yellow's Turn");
+      }
+    }
+
+    function updateModeButtonUI() {
+      const modeLocalBtn = document.getElementById('modeLocalBtn');
+      const modeAIBtn = document.getElementById('modeAIBtn');
+      const modeOnlineBtn = document.getElementById('modeOnlineBtn');
+      const screenModeTag = document.getElementById('screenModeTag');
+
+      const activeClass = "flex-1 py-1.5 px-2 rounded-xl bg-gradient-to-r from-red-500 to-amber-500 text-gray-950 font-bold shadow-md transition flex items-center justify-center gap-1.5";
+      const inactiveClass = "flex-1 py-1.5 px-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800/70 transition flex items-center justify-center gap-1.5";
+
+      modeLocalBtn.className = gameMode === 'local' ? activeClass : inactiveClass;
+      modeAIBtn.className = gameMode === 'ai' ? activeClass : inactiveClass;
+      modeOnlineBtn.className = gameMode === 'online' ? activeClass : inactiveClass;
+
+      if (gameMode === 'local') {
+        screenModeTag.textContent = 'Same Screen';
+        document.getElementById('p1Name').textContent = 'Player 1 (Red)';
+        document.getElementById('p2Name').textContent = 'Player 2 (Yellow)';
+      } else if (gameMode === 'ai') {
+        screenModeTag.textContent = 'Single Player';
+        document.getElementById('p1Name').textContent = 'You (Red)';
+        document.getElementById('p2Name').textContent = 'Smart AI';
+      } else {
+        screenModeTag.textContent = `Room: ${currentRoomId}`;
+        document.getElementById('p1Name').textContent = myPlayerRole === PLAYER_1 ? 'You (Red)' : 'Opponent (Red)';
+        document.getElementById('p2Name').textContent = myPlayerRole === PLAYER_2 ? 'You (Yellow)' : 'Opponent (Yellow)';
+      }
+    }
+
+    function updateScoresUI() {
+      document.getElementById('p1Score').textContent = scores.p1;
+      document.getElementById('p2Score').textContent = scores.p2;
+      document.getElementById('drawScore').textContent = scores.draws;
+    }
+
+    function updateConnBanner(text, isOnline = true) {
+      document.getElementById('connectionText').textContent = text;
+      const dot = document.getElementById('connPulseDot');
+      if (isOnline) {
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+      } else {
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
+      }
+    }
+
+    function spawnFloatingEmoji(emoji) {
+      const container = document.getElementById('reactionField');
+      const bubble = document.createElement('div');
+      bubble.textContent = emoji;
+      bubble.className = 'absolute text-4xl animate-pop-emoji drop-shadow-lg select-none';
+
+      const leftPercent = 15 + Math.random() * 70;
+      bubble.style.left = `${leftPercent}%`;
+      bubble.style.bottom = '15%';
+
+      container.appendChild(bubble);
+      setTimeout(() => bubble.remove(), 1500);
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toastNotification');
+      const toastMsg = document.getElementById('toastMsg');
+      toastMsg.textContent = msg;
+      toast.classList.remove('opacity-0');
+      toast.classList.add('opacity-100');
+
+      clearTimeout(window._toastTimeout);
+      window._toastTimeout = setTimeout(() => {
+        toast.classList.remove('opacity-100');
+        toast.classList.add('opacity-0');
+      }, 2500);
+    }
+
+    window._clientId = 'client_' + Math.random().toString(36).substring(2, 9);
+
+    window.onload = function () {
+      initBoard();
+      updateModeButtonUI();
+
+      // Read Room ID from URL Hash if present
+      const initialHash = window.location.hash.replace('#', '').trim().toUpperCase();
+      if (initialHash) {
+        currentRoomId = initialHash;
+        document.getElementById('customRoomInput').value = currentRoomId;
+        document.getElementById('activeRoomCode').textContent = currentRoomId;
+      }
+      initChannel();
+
+      // Board click handler
+      boardContainer.addEventListener('click', (e) => {
+        audio.init();
+        const slot = e.target.closest('.slot');
+        if (!slot) return;
+        const col = parseInt(slot.dataset.col, 10);
+        handleColumnSelection(col);
+      });
+
+      // Hover feedback for column indicators
+      boardContainer.addEventListener('mouseover', (e) => {
+        const slot = e.target.closest('.slot');
+        if (!slot) return;
+        const col = slot.dataset.col;
+        const guide = document.getElementById(`col-guide-${col}`);
+        if (guide) {
+          guide.classList.remove('bg-transparent');
+          guide.classList.add(currentPlayer === PLAYER_1 ? 'bg-red-500' : 'bg-amber-400');
+        }
+      });
+
+      boardContainer.addEventListener('mouseout', (e) => {
+        const slot = e.target.closest('.slot');
+        if (!slot) return;
+        const col = slot.dataset.col;
+        const guide = document.getElementById(`col-guide-${col}`);
+        if (guide) {
+          guide.className = 'w-full h-2 rounded-full transition-colors duration-200 bg-transparent';
+        }
+      });
+
+      // Direct Quick Mode Switchers
+      document.getElementById('modeLocalBtn').addEventListener('click', () => {
+        gameMode = 'local';
+        updateModeButtonUI();
+        initBoard();
+        showToast("2 Players on Same Screen activated!");
+      });
+
+      document.getElementById('modeAIBtn').addEventListener('click', () => {
+        gameMode = 'ai';
+        myPlayerRole = PLAYER_1;
+        updateModeButtonUI();
+        initBoard();
+        showToast("Switched to Solo vs AI Bot!");
+      });
+
+      document.getElementById('modeOnlineBtn').addEventListener('click', () => {
+        document.getElementById('lobbyModal').classList.remove('hidden');
+        switchTab('tabOnline');
+      });
+
+      // Sound toggle
+      document.getElementById('soundToggleBtn').addEventListener('click', () => {
+        audio.muted = !audio.muted;
+        const icon = document.getElementById('soundIcon');
+        icon.className = audio.muted ? 'fa-solid fa-volume-xmark text-gray-500' : 'fa-solid fa-volume-high text-white';
+        showToast(audio.muted ? "Sound Muted" : "Sound Enabled");
+      });
+
+      // Rematch button
+      document.getElementById('restartBtn').addEventListener('click', () => {
+        initBoard();
+        if (gameMode === 'online') {
+          sendNetworkMessage({ type: 'RESTART_REQUEST' });
+        }
+        showToast("New round started!");
+      });
+
+      // Reaction triggers
+      document.querySelectorAll('.reaction-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const emoji = btn.dataset.emoji;
+          spawnFloatingEmoji(emoji);
+          audio.playPop();
+          sendNetworkMessage({ type: 'REACTION', emoji: emoji });
+        });
+      });
+
+      // Quick chat triggers
+      document.querySelectorAll('.chat-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const msg = btn.dataset.msg;
+          showToast(`You: ${msg}`);
+          audio.playPop();
+          sendNetworkMessage({ type: 'CHAT', msg: msg });
+        });
+      });
+
+      // Lobby Modal
+      const lobbyModal = document.getElementById('lobbyModal');
+      document.getElementById('openLobbyBtn').addEventListener('click', () => {
+        lobbyModal.classList.remove('hidden');
+      });
+      document.getElementById('closeModalBtn').addEventListener('click', () => {
+        lobbyModal.classList.add('hidden');
+      });
+
+      // Tabs
+      document.getElementById('tabOnline').addEventListener('click', () => switchTab('tabOnline'));
+      document.getElementById('tabLocal').addEventListener('click', () => switchTab('tabLocal'));
+      document.getElementById('tabAI').addEventListener('click', () => switchTab('tabAI'));
+
+      // Set Room Code
+      document.getElementById('setRoomBtn').addEventListener('click', () => {
+        const val = document.getElementById('customRoomInput').value.trim().toUpperCase() || 'BATTLE1';
+        currentRoomId = val;
+        document.getElementById('activeRoomCode').textContent = currentRoomId;
+        window.location.hash = currentRoomId;
+        initChannel();
+        initBoard();
+        showToast(`Connected to Room: ${currentRoomId}`);
+        lobbyModal.classList.add('hidden');
+      });
+
+      // Player side pickers
+      document.getElementById('pickRedBtn').addEventListener('click', () => {
+        myPlayerRole = PLAYER_1;
+        document.getElementById('p1Name').textContent = "You (Red)";
+        document.getElementById('p2Name').textContent = "Opponent (Yellow)";
+        showToast("Playing as Red!");
+        updateTurnUI();
+      });
+
+      document.getElementById('pickYellowBtn').addEventListener('click', () => {
+        myPlayerRole = PLAYER_2;
+        document.getElementById('p1Name').textContent = "Opponent (Red)";
+        document.getElementById('p2Name').textContent = "You (Yellow)";
+        showToast("Playing as Yellow!");
+        updateTurnUI();
+      });
+
+      // Mode toggles
+      document.getElementById('activatePassPlayBtn').addEventListener('click', () => {
+        gameMode = 'local';
+        updateModeButtonUI();
+        lobbyModal.classList.add('hidden');
+        initBoard();
+        showToast("Switched to 2 Players on Same Screen!");
+      });
+
+      document.getElementById('activateAIBtn').addEventListener('click', () => {
+        gameMode = 'ai';
+        myPlayerRole = PLAYER_1;
+        updateModeButtonUI();
+        lobbyModal.classList.add('hidden');
+        initBoard();
+        showToast("Switched to Solo vs AI Bot!");
+      });
+
+      // Copy Link
+      const copyInviteHandler = () => {
+        const shareUrl = `${window.location.origin}${window.location.pathname}#${currentRoomId}`;
+        try {
+          const tempInput = document.createElement('input');
+          tempInput.value = shareUrl;
+          document.body.appendChild(tempInput);
+          tempInput.select();
+          document.execCommand('copy');
+          document.body.removeChild(tempInput);
+          showToast(`Link copied for Room ${currentRoomId}!`);
+        } catch (e) {
+          showToast(`Room Code: ${currentRoomId}`);
+        }
+      };
+
+      document.getElementById('copyInviteLinkBtn').addEventListener('click', copyInviteHandler);
+      document.getElementById('copyCodeMiniBtn').addEventListener('click', copyInviteHandler);
+    };
+
+    function switchTab(selectedId) {
+      const tabs = ['tabOnline', 'tabLocal', 'tabAI'];
+      const panels = ['panelOnline', 'panelLocal', 'panelAI'];
+
+      tabs.forEach(id => {
+        const btn = document.getElementById(id);
+        if (id === selectedId) {
+          btn.className = 'py-2 rounded-lg bg-indigo-600 text-white transition';
+        } else {
+          btn.className = 'py-2 rounded-lg text-gray-400 hover:text-white transition';
+        }
+      });
+
+      panels.forEach(id => {
+        const panel = document.getElementById(id);
+        if (id === selectedId.replace('tab', 'panel')) {
+          panel.classList.remove('hidden');
+        } else {
+          panel.classList.add('hidden');
+        }
+      });
+    }
+  </script>
+</body>
+</html>
